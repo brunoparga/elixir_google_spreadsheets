@@ -79,7 +79,16 @@ defmodule GSS.Spreadsheet do
   end
 
   @doc """
-  Granural read by a custom range from a spreadsheet.
+  Sort a sheet. Rows are sorted in ascending order, by the first column
+  of the sheet.
+  """
+  @spec sort!(pid, integer) :: :ok | {:error, Exception.t()}
+  def sort!(pid, row_count) do
+    GenServer.call(pid, {:sort!, row_count})
+  end
+
+  @doc """
+  Granular read by a custom range from a spreadsheet.
   """
   @spec fetch(pid, String.t()) :: {:ok, spreadsheet_data} | {:error, Exception.t()}
   def fetch(pid, range) do
@@ -247,6 +256,39 @@ defmodule GSS.Spreadsheet do
 
       {:json, _} ->
         {:reply, {:ok, 0}, state}
+
+      {:error, exception} ->
+        {:reply, {:error, exception}, state}
+    end
+  end
+
+  # Sort the spreadsheet
+  def handle_call({:sort!, row_count}, _from, %{spreadsheet_id: spreadsheet_id} = state) do
+    url_suffix = "#{spreadsheet_id}:batchUpdate"
+
+    request = %{
+      sortRange: %{
+        range: %{
+          # TODO: remove hardcoded values for sheetId (0), number of
+          # header rows (1) and last sort column (3)
+          sheetId: 0,
+          startRowIndex: 1,
+          endRowIndex: row_count + 1,
+          startColumnIndex: 0,
+          endColumnIndex: 2
+        },
+        sortSpecs: [
+          %{
+            dimensionIndex: 0,
+            sortOrder: "ASCENDING"
+          }
+        ]
+      }
+    }
+
+    case spreadsheet_query_post_batch(url_suffix, %{requests: [request]}) do
+      {:json, _response} ->
+        {:reply, :ok, state}
 
       {:error, exception} ->
         {:reply, {:error, exception}, state}
@@ -516,7 +558,7 @@ defmodule GSS.Spreadsheet do
 
     query = "#{spreadsheet_id}/values:batchUpdate"
 
-    case spreadsheet_query_post_batch(query, request_body, options) do
+    case spreadsheet_query_post_batch(query, request_body) do
       {:json, %{"responses" => responses}} ->
         {:reply, {:ok, responses}, state}
 
@@ -553,8 +595,10 @@ defmodule GSS.Spreadsheet do
     spreadsheet_query_response(response)
   end
 
-  @spec spreadsheet_query_post_batch(String.t(), map(), Keyword.t()) :: spreadsheet_response
-  defp spreadsheet_query_post_batch(url_suffix, request, _options) do
+  # @spec spreadsheet_query_post_batch(String.t(), map(), Keyword.t()) :: spreadsheet_response
+  # defp spreadsheet_query_post_batch(url_suffix, request, _options) do
+  @spec spreadsheet_query_post_batch(String.t(), map()) :: spreadsheet_response
+  defp spreadsheet_query_post_batch(url_suffix, request) do
     headers = %{"Authorization" => "Bearer #{GSS.Registry.token()}"}
     params = get_request_params()
     body = Poison.encode!(request)
