@@ -275,7 +275,7 @@ defmodule GSS.Spreadsheet do
           startRowIndex: 1,
           endRowIndex: row_count + 1,
           startColumnIndex: 0,
-          endColumnIndex: 2
+          endColumnIndex: 3
         },
         sortSpecs: [
           %{
